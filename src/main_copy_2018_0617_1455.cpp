@@ -371,6 +371,40 @@ int main() {
                        
           }
 
+          // speed control , an p + d controller to optimize the speed of the car, relate to car distance                 
+          double delta_s;
+          double delta_v;
+          double dv_p;
+          double dv_d;
+          delta_s = near_car_s - car_s - follow_distance; // m
+          if (is_initialize)
+          {
+            dv_d = 0;
+          }
+          else
+          {
+            dv_d = (1.0)*(delta_s - last_delta_s);
+          }
+          
+          dv_p = delta_s*.0150;
+
+          delta_v = dv_p + dv_d;
+          last_delta_s = delta_s;
+          is_initialize = false;
+
+          if (delta_v > 0.5)
+          {delta_v = 0.5; } 
+
+          if (delta_v < -0.5)
+          {delta_v = -0.5; } 
+
+          //std::cout <<"delta_s: " << delta_s << " dv_p: " << dv_p << " dv_d: " << dv_d << std::endl;
+          ref_vel += delta_v;
+          if (ref_vel > 49.5 )
+          {
+            ref_vel = 49.5;
+          } 
+
           // change lane logic
           // Does the in lane, and the car is stable?
           double ds = 0.2;
@@ -406,47 +440,6 @@ int main() {
             lane = 0;
           }
             
-
-          // speed control,use a p + d controller to optimize the speed of the car, relate to car distance                 
-          double delta_s;
-          double delta_v;
-          double dv_p;
-          double dv_d;
-          double speed_control_kp = 0.015;
-          double speed_control_td = 1.0;
-          double speed_limit = 49.5;
-
-          delta_s = near_car_s - car_s - follow_distance; // m
-          if (is_initialize)
-          {
-            dv_d = 0;// first cycle
-          }
-          else
-          {
-            dv_d = speed_control_td * (delta_s - last_delta_s);
-          }
-          
-          dv_p = delta_s * speed_control_kp;
-
-          delta_v = dv_p + dv_d;
-          last_delta_s = delta_s;
-          is_initialize = false;
-
-          if (delta_v > 0.5)
-          {delta_v = 0.5; } 
-
-          if (delta_v < - 1.0)
-          {delta_v = - 1.0; } 
-
-          ref_vel += delta_v;
-
-          //speed limit
-          if (ref_vel > speed_limit )
-          {
-            ref_vel = speed_limit;
-          } 
-
-
                   
           // create a list of widely spaced (x,y) waypoints, evenly spaced at 30m
           // later we will interpolate these waypoints with a spline and fill it in with more points
@@ -515,11 +508,7 @@ int main() {
 
               ptsx[i] = (shift_x *cos(0-ref_yaw)-shift_y*sin(0-ref_yaw));
               ptsy[i] = (shift_x *sin(0-ref_yaw)+shift_y*cos(0-ref_yaw));
-
-              std::cout << i << ": " << ptsx[i] << "  " << ptsy[i] << std::endl;
           }
-
-          
 
           // create a spline
           tk::spline s;

@@ -168,7 +168,7 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s, const vec
 // select best lane
 int getBestLane(bool L0, bool L1, bool L2, bool mylane)
 {
-  int bestLane = -1; //no change
+  int bestLane = -1;
 
   // no car, best lane = -1
   if(L0 == false && L1 == false && L2 == false){
@@ -177,12 +177,7 @@ int getBestLane(bool L0, bool L1, bool L2, bool mylane)
 
   // one lane has car
   if(L0 == true && L1 == false && L2 == false){
-    if (mylane = 0){
-      bestLane = 1;
-    }
-    else{
-    bestLane = -1;
-    }
+    bestLane = 2;
   } 
 
   if(L0 == false && L1 == true && L2 == false){
@@ -195,12 +190,7 @@ int getBestLane(bool L0, bool L1, bool L2, bool mylane)
   }
 
   if (L0 == false && L1 == false && L2 == true){
-    if (mylane = 2){
-      bestLane = 1;
-    }
-    else{
-    bestLane = -1;
-    }
+    bestLane = 0;
   }
 
   // two lane has car
@@ -261,17 +251,23 @@ int main() {
   	map_waypoints_dy.push_back(d_y);
   }
 
+  //std::cout << "map_waypoints" << std::endl;
+  //for( int i = 0; i < map_waypoints_x.size(); i++ )
+  //{
+  //  std::cout << i <<": " << map_waypoints_x[i] << "  " << map_waypoints_y[i] << "  " << map_waypoints_s[i] 
+  //            << "  " << map_waypoints_dx[i] << "  " << map_waypoints_dy[i] << std::endl;
+  //}
+
 	//start in lane 1
 	int lane = 1;
 
 	//have a reference velocity to target
 	double ref_vel = 0.0; //mph
+
   double last_delta_s;
   bool is_initialize = true;
-  double follow_distance = 30; //m
 
-    h.onMessage([&ref_vel, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,
-                 &map_waypoints_dy,&lane,&last_delta_s,&is_initialize,&follow_distance](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+    h.onMessage([&ref_vel, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&lane,&last_delta_s,&is_initialize](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -281,13 +277,13 @@ int main() {
     if (length && length > 2 && data[0] == '4' && data[1] == '2') {
 
       auto s = hasData(data);
-      double has_car_distance = 50;
-      double has_car_close = 15;
+      double best_distance = 20;
+      double change_lane_distance = 35;
       double near_car_s;
 
       if (s != "") {
         auto j = json::parse(s);
-        //std::cout <<"========== running step " << running_step <<"============"<< std::endl;
+        std::cout <<"========== running step " << running_step <<"============"<< std::endl;
         running_step++;
         
         string event = j[0].get<string>();
@@ -319,114 +315,87 @@ int main() {
             car_s = end_path_s;
           }
 
+          bool too_close = false;
           vector<bool> lane_has_car;
-          vector<bool> lane_has_car_close;
           lane_has_car.push_back(false);//lane0
           lane_has_car.push_back(false);//lane1
           lane_has_car.push_back(false);//lane2
-          lane_has_car_close.push_back(false);//lane0
-          lane_has_car_close.push_back(false);//lane1
-          lane_has_car_close.push_back(false);//lane2
 
           //find ref_v to use
-          near_car_s = car_s + has_car_distance;// follow_distance+40;
+          near_car_s = car_s + best_distance+40;
           for(int i = 0; i < sensor_fusion.size(); i++)
           {
             
             //car is in my lane
             float d = sensor_fusion[i][6];
-            double vx = sensor_fusion[i][3];
-            double vy = sensor_fusion[i][4];
-            double check_speed = sqrt(vx*vx + vy*vy);
-            double check_car_s = sensor_fusion[i][5];
-            check_car_s += ((double)prev_size*0.02*check_speed);// if using previous points can project s value out
+            if(d < (2+4*lane+2) && d > (2+4*lane -2)) 
+            {
+              double vx = sensor_fusion[i][3];
+              double vy = sensor_fusion[i][4];
+              double check_speed = sqrt(vx*vx + vy*vy);
+              double check_car_s = sensor_fusion[i][5];
 
-            // near car s
-            if(d < (2+4*lane+2) && d > (2+4*lane -2) && (check_car_s > car_s) && (check_car_s - car_s) < (has_car_distance+40))
+              
+              check_car_s += ((double)prev_size*0.02*check_speed);// if using previous points can project s value out
+
+              if((check_car_s > car_s) && ((check_car_s - car_s) < (best_distance+40)))
               {
+
+                // Do some logic here, lower reference velocity so we don't crash into the car infront of us 
+                // also flag to try to change lanes
+                // ref_vel = 29.5;//mph
+
+                //if ((check_car_s - car_s) < change_lane_distance)
+                //{
+                //  too_close = true;
+                //}
+                
                 if (check_car_s < near_car_s)
                 {
                   near_car_s = check_car_s;
                 }
 
               } 
+            }
+
               
-            // check car distance  
+              
             for(int k = 0; k < 3; k++)
             {
+              double vx = sensor_fusion[i][3];
+              double vy = sensor_fusion[i][4];
+              double check_speed = sqrt(vx*vx + vy*vy);
+              double check_car_s = sensor_fusion[i][5];
+
+              check_car_s += ((double)prev_size*0.02*check_speed);// if using previous points can project s value out
+
               if(d < (2+4*k+2) && d > (2+4*k -2))
               {
-                // has car far, for analyze best lane
-                if((check_car_s - car_s)>-20 && (check_car_s - car_s) < (has_car_distance + 1))
+                if(((check_car_s - car_s)>-12) && ((check_car_s - car_s) < (change_lane_distance + 1)))
                 {
                   lane_has_car[k] = true;
-                }
-                // has car close, for change lane
-                if((check_car_s - car_s)>-10 && (check_car_s - car_s) < (has_car_close + 1))
-                {
-                  lane_has_car_close[k] = true;
                 }
               }
             }
                        
           }
 
-          // change lane logic
-          // Does the in lane, and the car is stable?
-          double ds = 0.2;
-          bool lane0stable = (lane == 0) && (car_d < 2+ds) && (car_d > 2 - ds);
-          bool lane1stable = (lane == 1) && (car_d < 6+ds) && (car_d > 6 - ds);
-          bool lane2stable = (lane == 2) && (car_d < 10+ds) && (car_d > 10 - ds);
-
-          // which is the best lane ?
-          int bestLane;
-          bestLane = getBestLane(lane_has_car[0],lane_has_car[1],lane_has_car[2],lane);
-          //std::cout << "best lane: " << bestLane << std::endl; 
-
-          float lowest_chang_lane_speed = 25;
-          // change lane when all condition is true
-          // 0 -> 1
-          if (lane == 0 && (bestLane == 1 || bestLane == 2) && lane_has_car_close[1] == false 
-              && lane0stable && car_speed>lowest_chang_lane_speed ) {
-            lane = 1;
-          }
-          // 1 -> 2
-          else if (lane == 1 && bestLane == 2 && lane_has_car_close[2] == false && lane1stable 
-                  && car_speed>lowest_chang_lane_speed ) {
-            lane = 2;
-          }
-          // 2 -> 1
-          else if (lane == 2 && (bestLane == 0 || bestLane == 1) && lane_has_car_close[1] == false 
-                  && lane2stable && car_speed>lowest_chang_lane_speed ) {
-            lane = 1;
-          }
-          // 1 -> 0
-          else if (lane == 1 && bestLane == 0 && lane_has_car_close[0] == false && lane1stable 
-                  && car_speed>lowest_chang_lane_speed ) {
-            lane = 0;
-          }
-            
-
-          // speed control,use a p + d controller to optimize the speed of the car, relate to car distance                 
           double delta_s;
+          //double last_delta_s;
           double delta_v;
           double dv_p;
           double dv_d;
-          double speed_control_kp = 0.015;
-          double speed_control_td = 1.0;
-          double speed_limit = 49.5;
-
-          delta_s = near_car_s - car_s - follow_distance; // m
+          delta_s = near_car_s - car_s - best_distance; // m
           if (is_initialize)
           {
-            dv_d = 0;// first cycle
+            dv_d = 0;
           }
           else
           {
-            dv_d = speed_control_td * (delta_s - last_delta_s);
+            dv_d = (1.0)*(delta_s - last_delta_s);
           }
           
-          dv_p = delta_s * speed_control_kp;
+          dv_p = delta_s*.0150;
 
           delta_v = dv_p + dv_d;
           last_delta_s = delta_s;
@@ -435,18 +404,88 @@ int main() {
           if (delta_v > 0.5)
           {delta_v = 0.5; } 
 
-          if (delta_v < - 1.0)
-          {delta_v = - 1.0; } 
+          if (delta_v < -0.5)
+          {delta_v = -0.5; } 
 
+          std::cout <<"delta_s: " << delta_s << " dv_p: " << dv_p << " dv_d: " << dv_d << std::endl;
           ref_vel += delta_v;
-
-          //speed limit
-          if (ref_vel > speed_limit )
+          if (ref_vel > 49.5 )
           {
-            ref_vel = speed_limit;
+            ref_vel = 49.5;
           } 
+          
 
+          //if(too_close)
+          //{
+          //  if 
+          //  ref_vel -= 0.2;//.224;
+          //}
+          //else if (ref_vel < 49.0)//49.5
+          //{
+          //  ref_vel += 0.5;//.224;
+          //}
 
+          double ds = 0.2;
+          bool car_stable;
+          car_stable = ((car_d < 2+ds) && (car_d > 2 - ds)) || ((car_d < 6+ds) && (car_d > 6 - ds)) || ((car_d < 10+ds) && (car_d > 10 - ds)); 
+          
+          bool lane0stable = (lane == 0) && (car_d < 2+ds) && (car_d > 2 - ds);
+          bool lane1stable = (lane == 1) && (car_d < 6+ds) && (car_d > 6 - ds);
+          bool lane2stable = (lane == 2) && (car_d < 10+ds) && (car_d > 10 - ds);
+
+          int bestLane;
+          bestLane = getBestLane(lane_has_car[0],lane_has_car[1],lane_has_car[2],lane);
+          std::cout << "best lane: " << bestLane << std::endl; 
+
+          // 0 -> 1
+          if (lane == 0 && (bestLane == 1 || bestLane == 2) && lane_has_car[1] == false && car_stable && car_d > 1 && car_d < 3 ) {
+            lane = 1;
+          }
+          // 1 -> 2
+          else if (lane == 1 && bestLane == 2 && lane_has_car[2] == false && car_stable && car_d > 5 && car_d < 7) {
+            lane = 2;
+          }
+          // 2 -> 1
+          else if (lane == 2 && (bestLane == 0 || bestLane == 1) && lane_has_car[1] == false && car_stable && car_d > 9 && car_d < 11) {
+            lane = 1;
+          }
+          // 1 -> 0
+          else if (lane == 1 && bestLane == 0 && lane_has_car[0] == false && car_stable && car_d > 5 && car_d < 7) {
+            lane = 0;
+          }
+
+          /*
+          //change lane
+          if(too_close && car_stable)
+          {
+            if(lane == 0 && lane0stable)
+            {
+              if((lane_has_car[1] == false) )
+              {
+                lane = 1;
+              }
+            }
+            else if(lane == 1 && lane1stable)
+            {
+              if(lane_has_car[0] == false)
+              {
+                lane = 0;
+              }
+              else if(lane_has_car[2] == false)
+              {
+                lane = 2;
+              }
+            }
+            else if(lane == 2 && lane2stable)
+            {
+              if(lane_has_car[1] == false)
+              {
+                lane = 1;
+              }
+            }
+            
+          }*/
+            
                   
           // create a list of widely spaced (x,y) waypoints, evenly spaced at 30m
           // later we will interpolate these waypoints with a spline and fill it in with more points
@@ -515,11 +554,7 @@ int main() {
 
               ptsx[i] = (shift_x *cos(0-ref_yaw)-shift_y*sin(0-ref_yaw));
               ptsy[i] = (shift_x *sin(0-ref_yaw)+shift_y*cos(0-ref_yaw));
-
-              std::cout << i << ": " << ptsx[i] << "  " << ptsy[i] << std::endl;
           }
-
-          
 
           // create a spline
           tk::spline s;
@@ -569,8 +604,28 @@ int main() {
               next_y_vals.push_back(y_point);
           }
 
+          //for(int i = 0; i < next_x_vals.size(); i++)
+          //{
+          //  std::cout << "next_x_vals " << i <<": " << next_x_vals[i] << "  next_y_vals " << i << ": " << next_y_vals[i] << std::endl;
+          //}
+
           json msgJson;
 
+
+          // TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
+          //double dist_inc = 0.5;
+          //for(int i = 0; i < 50; i++)
+          //{
+          //    double next_s = car_s + (i+1)*dist_inc;
+          //    double next_d = 6;
+          //    vector<double> xy = getXY(next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+
+          //    next_x_vals.push_back(xy[0]);
+          //    next_y_vals.push_back(xy[1]);
+          //}
+
+
+          // END
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
 
