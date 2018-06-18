@@ -516,7 +516,7 @@ int main() {
               ptsx[i] = (shift_x *cos(0-ref_yaw)-shift_y*sin(0-ref_yaw));
               ptsy[i] = (shift_x *sin(0-ref_yaw)+shift_y*cos(0-ref_yaw));
 
-              std::cout << i << ": " << ptsx[i] << "  " << ptsy[i] << std::endl;
+              //std::cout << i << ": " << ptsx[i] << "  " << ptsy[i] << std::endl;
           }
 
           
